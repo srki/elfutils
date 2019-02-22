@@ -39,6 +39,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#define thread_local __thread
+
 /* gettext helper macros.  */
 #define _(Str) dgettext ("elfutils", Str)
 
@@ -428,13 +430,13 @@ extern const size_t __libelf_type_sizes[EV_NUM - 1][ELFCLASSNUM - 1][ELF_T_NUM] 
 #endif
 
 /* Currently selected version of the ELF specification.  */
-extern unsigned int __libelf_version attribute_hidden;
+extern thread_local unsigned int __libelf_version attribute_hidden;
 
 /* The byte value used for filling gaps.  */
 extern int __libelf_fill_byte attribute_hidden;
 
 /* Nonzero if the version was set.  */
-extern int __libelf_version_initialized attribute_hidden;
+extern thread_local int __libelf_version_initialized attribute_hidden;
 
 /* Index for __libelf_type_sizes et al.  */
 #if EV_NUM == 2

@@ -35,10 +35,10 @@
 
 
 /* Is the version initialized?  */
-int __libelf_version_initialized;
+thread_local int __libelf_version_initialized;
 
 /* Currently selected version.  */
-unsigned int __libelf_version = EV_CURRENT;
+thread_local unsigned int __libelf_version = EV_CURRENT;
 
 
 unsigned int
