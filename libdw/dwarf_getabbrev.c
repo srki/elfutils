@@ -33,9 +33,7 @@
 
 #include <dwarf.h>
 #include "libdwP.h"
-#include <pthread.h>
 
-static pthread_mutex_t getabbrev_lock = PTHREAD_MUTEX_INITIALIZER;
 
 Dwarf_Abbrev *
 internal_function
@@ -84,7 +82,6 @@ __libdw_getabbrev (Dwarf *dbg, struct Dwarf_CU *cu, Dwarf_Off offset,
   /* Check whether this code is already in the hash table.  */
   bool foundit = false;
   Dwarf_Abbrev *abb = NULL;
-  pthread_mutex_lock(&getabbrev_lock);
   if (cu == NULL
       || (abb = Dwarf_Abbrev_Hash_find (&cu->abbrev_hash, code, NULL)) == NULL)
     {
@@ -99,7 +96,6 @@ __libdw_getabbrev (Dwarf *dbg, struct Dwarf_CU *cu, Dwarf_Off offset,
 
       if (unlikely (abb->offset != offset))
 	{
-          pthread_mutex_unlock(&getabbrev_lock);
 	  /* A duplicate abbrev code at a different offset,
 	     that should never happen.  */
 	invalid:
@@ -153,7 +149,6 @@ __libdw_getabbrev (Dwarf *dbg, struct Dwarf_CU *cu, Dwarf_Off offset,
   /* Add the entry to the hash table.  */
   if (cu != NULL && ! foundit)
     (void) Dwarf_Abbrev_Hash_insert (&cu->abbrev_hash, abb->code, abb);
-  pthread_mutex_unlock(&getabbrev_lock);
 
  out:
   return abb;
