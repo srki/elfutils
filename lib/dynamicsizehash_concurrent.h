@@ -68,18 +68,18 @@ extern size_t next_prime (size_t seed);
  */
 
 /* Table entry type.  */
-#define _DYNHASHENTTYPE(name) \
+#define _DYNHASHCENTTYPE(name) \
   typedef struct name##_ent						      \
   {									      \
     HASHTYPE hashval;							      \
     TYPE data;								      \
     atomic_int state;							      \
   } name##_ent
-#define DYNHASHENTTYPE(name) _DYNHASHENTTYPE (name)
-DYNHASHENTTYPE (NAME);
+#define DYNHASHCENTTYPE(name) _DYNHASHCENTTYPE (name)
+DYNHASHCENTTYPE (NAME);
 
 /* Type of the dynamic hash table data structure.  */
-#define _DYNHASHTYPE(name) \
+#define _DYNHASHCTYPE(name) \
 typedef struct								      \
 {									      \
   size_t size;								      \
@@ -94,8 +94,8 @@ typedef struct								      \
   atomic_size_t num_moved_blocks;					      \
   pthread_rwlock_t resize_rwl;						      \
 } name
-#define DYNHASHTYPE(name) _DYNHASHTYPE (name)
-DYNHASHTYPE (NAME);
+#define DYNHASHCTYPE(name) _DYNHASHCTYPE (name)
+DYNHASHCTYPE (NAME);
 
 
 
@@ -116,8 +116,8 @@ FUNCTIONS (NAME)
 
 
 #ifndef NO_UNDEF
-# undef DYNHASHENTTYPE
-# undef DYNHASHTYPE
+# undef DYNHASHCENTTYPE
+# undef DYNHASHCTYPE
 # undef FUNCTIONS
 # undef _FUNCTIONS
 # undef XFUNCTIONS

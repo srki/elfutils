@@ -28,10 +28,8 @@
 
 #include <assert.h>
 #include <stdlib.h>
-#include <stdio.h>
-//#include <system.h>
-
-#include "next_prime.c"
+#include <system.h>
+#include <pthread.h>
 
 /* Before including this file the following macros must be defined:
 
@@ -310,7 +308,7 @@ INIT(NAME) (NAME *htab, size_t init_size)
     if (htab->table == NULL)
         return -1;
 
-    for (int i = 0; i <= init_size; i++)
+    for (size_t i = 0; i <= init_size; i++)
         atomic_init(&htab->table[i].state, 0);
 
     return 0;

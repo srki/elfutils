@@ -34,6 +34,6 @@
 #define TYPE Dwarf_Abbrev *
 #define COMPARE(a, b) (0)
 
-#include <dynamicsizehash.h>
+#include <dynamicsizehash_concurrent.h>
 
 #endif	/* dwarf_abbrev_hash.h */
