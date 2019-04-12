@@ -321,7 +321,8 @@ int
   name##_free
 FREE(NAME) (NAME *htab)
 {
-    free(htab->table);
+    pthread_rwlock_destroy (&htab->resize_rwl);
+    free (htab->table);
     return 0;
 }
 
