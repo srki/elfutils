@@ -31,6 +31,7 @@
 
 #include <libintl.h>
 #include <stdbool.h>
+#include <pthread.h>
 
 #include <libdw.h>
 #include <dwarf.h>
@@ -218,16 +219,18 @@ struct Dwarf
   /* Similar for addrx/constx, which will come from .debug_addr section.  */
   struct Dwarf_CU *fake_addr_cu;
 
-  /* Internal memory handling.  This is basically a simplified
+  /* Internal memory handling.  This is basically a simplified thread-local
      reimplementation of obstacks.  Unfortunately the standard obstack
      implementation is not usable in libraries.  */
+  pthread_rwlock_t mem_rwl;
+  size_t mem_stacks;
   struct libdw_memblock
   {
     size_t size;
     size_t remaining;
     struct libdw_memblock *prev;
     char mem[0];
-  } *mem_tail;
+  } **mem_tails;
 
   /* Default size of allocated memory blocks.  */
   size_t mem_default_size;
@@ -572,7 +575,7 @@ extern void __libdw_seterrno (int value) internal_function;
 
 /* Memory handling, the easy parts.  This macro does not do any locking.  */
 #define libdw_alloc(dbg, type, tsize, cnt) \
-  ({ struct libdw_memblock *_tail = (dbg)->mem_tail;			      \
+  ({ struct libdw_memblock *_tail = __libdw_alloc_tail(dbg);		      \
      size_t _required = (tsize) * (cnt);				      \
      type *_result = (type *) (_tail->mem + (_tail->size - _tail->remaining));\
      size_t _padding = ((__alignof (type)				      \
@@ -590,6 +593,10 @@ extern void __libdw_seterrno (int value) internal_function;
 
 #define libdw_typed_alloc(dbg, type) \
   libdw_alloc (dbg, type, sizeof (type), 1)
+
+/* Callback to choose a thread-local memory allocation stack.  */
+extern struct libdw_memblock *__libdw_alloc_tail (Dwarf* dbg)
+     __nonnull_attribute__ (1);
 
 /* Callback to allocate more.  */
 extern void *__libdw_allocate (Dwarf *dbg, size_t minsize, size_t align)
