@@ -417,11 +417,14 @@ dwarf_begin_elf (Elf *elf, Dwarf_Cmd cmd, Elf_Scn *scngrp)
   /* Initialize the memory handling.  */
   result->mem_default_size = mem_default_size;
   result->oom_handler = __libdw_oom;
-  result->mem_tail = (struct libdw_memblock *) (result + 1);
-  result->mem_tail->size = (result->mem_default_size
-			    - offsetof (struct libdw_memblock, mem));
-  result->mem_tail->remaining = result->mem_tail->size;
-  result->mem_tail->prev = NULL;
+  pthread_rwlock_init(&result->mem_rwl, NULL);
+  result->mem_stacks = 1;
+  result->mem_tails = malloc (sizeof (struct libdw_memblock *));
+  result->mem_tails[0] = (struct libdw_memblock *) (result + 1);
+  result->mem_tails[0]->size = (result->mem_default_size
+			       - offsetof (struct libdw_memblock, mem));
+  result->mem_tails[0]->remaining = result->mem_tails[0]->size;
+  result->mem_tails[0]->prev = NULL;
 
   if (cmd == DWARF_C_READ || cmd == DWARF_C_RDWR)
     {
