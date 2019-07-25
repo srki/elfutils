@@ -93,6 +93,7 @@ dwarf_end (Dwarf *dwarf)
 
       /* And the split Dwarf.  */
       tdestroy (dwarf->split_tree, noop_free);
+      pthread_mutex_destroy (&dwarf->files_lines_lock);
 
       for (size_t i = 0; i < dwarf->mem_stacks; i++)
         {

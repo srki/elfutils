@@ -425,6 +425,7 @@ dwarf_begin_elf (Elf *elf, Dwarf_Cmd cmd, Elf_Scn *scngrp)
 			       - offsetof (struct libdw_memblock, mem));
   result->mem_tails[0]->remaining = result->mem_tails[0]->size;
   result->mem_tails[0]->prev = NULL;
+  pthread_mutex_init(&result->files_lines_lock, NULL);
 
   if (cmd == DWARF_C_READ || cmd == DWARF_C_RDWR)
     {

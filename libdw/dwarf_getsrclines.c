@@ -35,6 +35,8 @@
 #include <string.h>
 #include <search.h>
 
+#include <stdio.h>
+
 #include "dwarf.h"
 #include "libdwP.h"
 
@@ -1104,8 +1106,10 @@ __libdw_getsrclines (Dwarf *dbg, Dwarf_Off debug_line_offset,
 		     Dwarf_Lines **linesp, Dwarf_Files **filesp)
 {
   struct files_lines_s fake = { .debug_line_offset = debug_line_offset };
+  pthread_mutex_lock(&dbg->files_lines_lock);
   struct files_lines_s **found = tfind (&fake, &dbg->files_lines,
 					files_lines_compare);
+  pthread_mutex_unlock(&dbg->files_lines_lock);
   if (found == NULL)
     {
       Elf_Data *data = __libdw_checked_get_data (dbg, IDX_debug_line);
@@ -1126,7 +1130,9 @@ __libdw_getsrclines (Dwarf *dbg, Dwarf_Off debug_line_offset,
 
       node->debug_line_offset = debug_line_offset;
 
+      pthread_mutex_lock(&dbg->files_lines_lock);
       found = tsearch (node, &dbg->files_lines, files_lines_compare);
+      pthread_mutex_unlock(&dbg->files_lines_lock);
       if (found == NULL)
 	{
 	  __libdw_seterrno (DWARF_E_NOMEM);

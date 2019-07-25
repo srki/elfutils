@@ -201,6 +201,7 @@ struct Dwarf
   void *macro_ops;
 
   /* Search tree for decoded .debug_line units.  */
+  pthread_mutex_t files_lines_lock;
   void *files_lines;
 
   /* Address ranges.  */
