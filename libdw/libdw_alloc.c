@@ -37,8 +37,13 @@
 #include "libdwP.h"
 #include "system.h"
 #include "stdatomic.h"
-#include "valgrind/helgrind.h"
-#include "valgrind/drd.h"
+#if USE_VG_ANNOTATIONS == 1
+#include <helgrind.h>
+#include <drd.h>
+#else
+#define ANNOTATE_HAPPENS_BEFORE(X)
+#define ANNOTATE_HAPPENS_AFTER(X)
+#endif
 
 
 #define thread_local __thread

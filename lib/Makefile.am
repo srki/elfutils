@@ -38,8 +38,7 @@ libeu_a_SOURCES = xstrdup.c xstrndup.c xmalloc.c next_prime.c \
 		  color.c printversion.c
 
 noinst_HEADERS = fixedsizehash.h libeu.h system.h dynamicsizehash.h list.h \
-		 eu-config.h color.h printversion.h bpf.h dynamicsizehash_concurrent.h \
-                 valgrind/helgrind.h valgrind/drd.h valgrind/valgrind.h
+		 eu-config.h color.h printversion.h bpf.h dynamicsizehash_concurrent.h
 EXTRA_DIST = dynamicsizehash.c dynamicsizehash_concurrent.c
 
 if !GPROF
