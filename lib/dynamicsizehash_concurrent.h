@@ -1,6 +1,7 @@
-/* Copyright (C) 2000-2010 Red Hat, Inc.
+/* Copyright (C) 2000-2019 Red Hat, Inc.
    This file is part of elfutils.
-   Written by Ulrich Drepper <drepper@redhat.com>, 2000.
+   Written by Srdan Milakovic <sm108@rice.edu>, 2019.
+   Derived from Ulrich Drepper <drepper@redhat.com>, 2000.
 
    This file is free software; you can redistribute it and/or modify
    it under the terms of either

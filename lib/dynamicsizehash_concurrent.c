@@ -1,6 +1,7 @@
-/* Copyright (C) 2000-2010 Red Hat, Inc.
+/* Copyright (C) 2000-2019 Red Hat, Inc.
    This file is part of elfutils.
-   Written by Ulrich Drepper <drepper@redhat.com>, 2000.
+   Written by Srdan Milakovic <sm108@rice.edu>, 2019.
+   Derived from Ulrich Drepper <drepper@redhat.com>, 2000.
 
    This file is free software; you can redistribute it and/or modify
    it under the terms of either
@@ -51,12 +52,14 @@ lookup (NAME *htab, HASHTYPE hval, TYPE val __attribute__ ((unused)))
        can skip the division, which helps performance when this is common.  */
     size_t idx = 1 + (hval < htab->size ? hval : hval % htab->size);
 
-    int state = atomic_load(&htab->table[idx].state);
+    int state = atomic_load_explicit(&htab->table[idx].state,
+                                     memory_order_acquire);
     if (state == 0)
         return 0;
 
     while (state == 1)
-        state = atomic_load(&htab->table[idx].state);
+        state = atomic_load_explicit(&htab->table[idx].state,
+                                     memory_order_acquire);
 
     HASHTYPE hash;
 
@@ -74,12 +77,14 @@ lookup (NAME *htab, HASHTYPE hval, TYPE val __attribute__ ((unused)))
         else
             idx -= hash;
 
-        state = atomic_load(&htab->table[idx].state);
+        state = atomic_load_explicit(&htab->table[idx].state,
+                                     memory_order_acquire);
         if (state == 0)
             return 0;
 
         while (state == 1)
-            state = atomic_load(&htab->table[idx].state);
+            state = atomic_load_explicit(&htab->table[idx].state,
+                                         memory_order_acquire);
 
         /* If entry is found use it.  */
         if (htab->table[idx].hashval == hval
@@ -91,22 +96,26 @@ lookup (NAME *htab, HASHTYPE hval, TYPE val __attribute__ ((unused)))
 static int
 insert_helper (NAME *htab, HASHTYPE hval, TYPE val)
 {
-    /* First hash function: simply take the modul but prevent zero.  Small values
+    /* First hash function: simply take the modul but prevent zero. Small values
        can skip the division, which helps performance when this is common.  */
     size_t idx = 1 + (hval < htab->size ? hval : hval % htab->size);
 
-    int state = atomic_load(&htab->table[idx].state);
-    if (state == 0 && atomic_compare_exchange_strong(&htab->table[idx].state, &state, 1))
+    int state = atomic_load_explicit(&htab->table[idx].state,
+                                     memory_order_acquire);
+    if (state == 0 && atomic_compare_exchange_strong_explicit(
+                          &htab->table[idx].state, &state, 1,
+                          memory_order_acquire, memory_order_acquire))
     {
         htab->table[idx].hashval = hval;
         htab->table[idx].data = val;
-        atomic_store(&htab->table[idx].state, 2);
+        atomic_store_explicit(&htab->table[idx].state, 2, memory_order_release);
 
         return 0;
     }
 
     while (state == 1)
-        state = atomic_load(&htab->table[idx].state);
+        state = atomic_load_explicit(&htab->table[idx].state,
+                                     memory_order_acquire);
 
     HASHTYPE hash;
 
@@ -124,18 +133,23 @@ insert_helper (NAME *htab, HASHTYPE hval, TYPE val)
         else
             idx -= hash;
 
-        state = atomic_load(&htab->table[idx].state);
-        if (state == 0 && atomic_compare_exchange_strong(&htab->table[idx].state, &state, 1))
+        state = atomic_load_explicit(&htab->table[idx].state,
+                                     memory_order_acquire);
+        if (state == 0 && atomic_compare_exchange_strong_explicit(
+                              &htab->table[idx].state, &state, 1,
+                              memory_order_acquire, memory_order_acquire))
         {
             htab->table[idx].hashval = hval;
             htab->table[idx].data = val;
-            atomic_store(&htab->table[idx].state, 2);
+            atomic_store_explicit(&htab->table[idx].state, 2,
+                                  memory_order_release);
 
             return 0;
         }
 
         while (state == 1)
-            state = atomic_load(&htab->table[idx].state);
+            state = atomic_load_explicit(&htab->table[idx].state,
+                                         memory_order_acquire);
 
         /* The key exists in the table, return 0  */
         if (htab->table[idx].hashval == hval
@@ -171,7 +185,9 @@ static void resize_helper(NAME *htab, int blocking) {
     size_t my_block;
     size_t num_finished_blocks = 0;
 
-    while ((my_block = atomic_fetch_add(&htab->next_init_block, 1)) < num_new_blocks) {
+    while ((my_block = atomic_fetch_add_explicit(&htab->next_init_block, 1,
+                                                 memory_order_acquire))
+                                                      < num_new_blocks) {
         size_t record_it = my_block * INITIALIZATION_BLOCK_SIZE;
         size_t record_end = (my_block + 1) * INITIALIZATION_BLOCK_SIZE;
         if (record_end > htab->size)
@@ -183,31 +199,39 @@ static void resize_helper(NAME *htab, int blocking) {
         num_finished_blocks++;
     }
 
-    atomic_fetch_add(&htab->num_initialized_blocks, num_finished_blocks);
-    while (atomic_load(&htab->num_initialized_blocks) != num_new_blocks);
+    atomic_fetch_add_explicit(&htab->num_initialized_blocks,
+                              num_finished_blocks, memory_order_release);
+    while (atomic_load_explicit(&htab->num_initialized_blocks,
+                                memory_order_acquire) != num_new_blocks);
 
     /* All block are initialized, start moving */
     num_finished_blocks = 0;
-    while ((my_block = atomic_fetch_add(&htab->next_move_block, 1)) < num_old_blocks) {
+    while ((my_block = atomic_fetch_add_explicit(&htab->next_move_block, 1,
+                                                 memory_order_acquire))
+                                                     < num_old_blocks) {
         size_t record_it = my_block * MOVE_BLOCK_SIZE;
         size_t record_end = (my_block + 1) * MOVE_BLOCK_SIZE;
         if (record_end > htab->old_size)
             record_end = htab->old_size;
 
         while (record_it++ != record_end) {
-            if (atomic_load(&htab->old_table[record_it].state) != 2)
+            if (atomic_load_explicit(&htab->old_table[record_it].state,
+                                     memory_order_relaxed) != 2)
                 continue;
 
-            insert_helper(htab, htab->old_table[record_it].hashval, htab->old_table[record_it].data);
+            insert_helper(htab, htab->old_table[record_it].hashval,
+                          htab->old_table[record_it].data);
         }
 
         num_finished_blocks++;
     }
 
-    atomic_fetch_add(&htab->num_moved_blocks, num_finished_blocks);
+    atomic_fetch_add_explicit(&htab->num_moved_blocks, num_finished_blocks,
+                              memory_order_release);
 
     if (blocking)
-        while (atomic_load(&htab->num_moved_blocks) != num_old_blocks);
+        while (atomic_load_explicit(&htab->num_moved_blocks,
+                                    memory_order_acquire) != num_old_blocks);
 }
 
 static void
@@ -220,65 +244,76 @@ resize_master(NAME *htab) {
     assert(htab->table);
 
     /* Change state from ALLOCATING_MEMORY to MOVING_DATA */
-    atomic_fetch_xor(&htab->resizing_state, ALLOCATING_MEMORY ^ MOVING_DATA);
+    atomic_fetch_xor_explicit(&htab->resizing_state,
+                              ALLOCATING_MEMORY ^ MOVING_DATA,
+                              memory_order_release);
 
     resize_helper(htab, 1);
 
     /* Change state from MOVING_DATA to CLEANING */
-    atomic_fetch_xor(&htab->resizing_state, MOVING_DATA ^ CLEANING);
-
-    size_t resize_state;
-    do {
-        resize_state = atomic_load(&htab->resizing_state);
-    } while (GET_ACTIVE_WORKERS(resize_state) != 0);
+    size_t resize_state = atomic_fetch_xor_explicit(&htab->resizing_state,
+                                                    MOVING_DATA ^ CLEANING,
+                                                    memory_order_acq_rel);
+    while (GET_ACTIVE_WORKERS(resize_state) != 0)
+        resize_state = atomic_load_explicit(&htab->resizing_state,
+                                            memory_order_acquire);
 
     /* There are no more active workers */
-    atomic_init(&htab->next_init_block, 0);
-    atomic_init(&htab->num_initialized_blocks, 0);
+    atomic_store_explicit(&htab->next_init_block, 0, memory_order_relaxed);
+    atomic_store_explicit(&htab->num_initialized_blocks, 0,
+                          memory_order_relaxed);
 
-    atomic_init(&htab->next_move_block, 0);
-    atomic_init(&htab->num_moved_blocks, 0);
+    atomic_store_explicit(&htab->next_move_block, 0, memory_order_relaxed);
+    atomic_store_explicit(&htab->num_moved_blocks, 0, memory_order_relaxed);
 
     free(htab->old_table);
 
     /* Change state to NO_RESIZING */
     assert(atomic_load(&htab->resizing_state) == CLEANING);
-    atomic_init(&htab->resizing_state, NO_RESIZING);
+    atomic_fetch_xor_explicit(&htab->resizing_state, CLEANING ^ NO_RESIZING,
+                              memory_order_relaxed);
 
 }
 
 static void
 resize_worker(NAME *htab) {
-    size_t resize_state = atomic_load(&htab->resizing_state);
+    size_t resize_state = atomic_load_explicit(&htab->resizing_state,
+                                               memory_order_acquire);
 
     /* If the resize has finished */
     if (IS_NO_RESIZE_OR_CLEANING(resize_state))
         return;
 
     /* Register as worker and check if the resize has finished in the meantime*/
-    resize_state = atomic_fetch_add(&htab->resizing_state, STATE_INCREMENT);
+    resize_state = atomic_fetch_add_explicit(&htab->resizing_state,
+                                             STATE_INCREMENT,
+                                             memory_order_acquire);
     if (IS_NO_RESIZE_OR_CLEANING(resize_state))
     {
-        atomic_fetch_sub(&htab->resizing_state, STATE_INCREMENT);
+        atomic_fetch_sub_explicit(&htab->resizing_state, STATE_INCREMENT,
+                                  memory_order_relaxed);
         return;
     }
 
     /* Wait while the new table is being allocated. */
     while (GET_STATE(resize_state) == ALLOCATING_MEMORY)
-        resize_state = atomic_load(&htab->resizing_state);
+        resize_state = atomic_load_explicit(&htab->resizing_state,
+                                            memory_order_acquire);
 
     /* Check if the resize is done */
     assert(GET_STATE(resize_state) != NO_RESIZING);
     if (GET_STATE(resize_state) == CLEANING)
     {
-        atomic_fetch_sub(&htab->resizing_state, STATE_INCREMENT);
+        atomic_fetch_sub_explicit(&htab->resizing_state, STATE_INCREMENT,
+                                  memory_order_relaxed);
         return;
     }
 
     resize_helper(htab, 0);
 
     /* Deregister worker */
-    atomic_fetch_sub(&htab->resizing_state, STATE_INCREMENT);
+    atomic_fetch_sub_explicit(&htab->resizing_state, STATE_INCREMENT,
+                              memory_order_release);
 }
 
 
@@ -342,12 +377,14 @@ INSERT(NAME) (NAME *htab, HASHTYPE hval, TYPE data)
         size_t filled;
         if (!incremented)
         {
-            filled = atomic_fetch_add(&htab->filled, 1);
+            filled = atomic_fetch_add_explicit(&htab->filled, 1,
+                                               memory_order_acquire);
             incremented = 1;
         }
         else
         {
-            filled = atomic_load(&htab->filled);
+            filled = atomic_load_explicit(&htab->filled,
+                                          memory_order_acquire);
         }
 
 
@@ -355,14 +392,19 @@ INSERT(NAME) (NAME *htab, HASHTYPE hval, TYPE data)
         {
             /* Table is filled more than 90%.  Resize the table.  */
 
-            size_t resizing_state = atomic_load(&htab->resizing_state);
+            size_t resizing_state = atomic_load_explicit(&htab->resizing_state,
+                                                         memory_order_acquire);
             if (resizing_state == 0 &&
-                atomic_compare_exchange_strong(&htab->resizing_state, &resizing_state, ALLOCATING_MEMORY))
+                atomic_compare_exchange_strong_explicit(&htab->resizing_state,
+                                                        &resizing_state,
+                                                        ALLOCATING_MEMORY,
+                                                        memory_order_acquire,
+                                                        memory_order_acquire))
             {
                 /* Master thread */
                 pthread_rwlock_unlock(&htab->resize_rwl);
 
-                pthread_rwlock_rdlock(&htab->resize_rwl);
+                pthread_rwlock_wrlock(&htab->resize_rwl);
                 resize_master(htab);
                 pthread_rwlock_unlock(&htab->resize_rwl);
 
