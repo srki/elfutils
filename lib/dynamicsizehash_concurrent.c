@@ -151,7 +151,7 @@ insert_helper (NAME *htab, HASHTYPE hval, TYPE val)
             state = atomic_load_explicit(&htab->table[idx].state,
                                          memory_order_acquire);
 
-        /* The key exists in the table, return 0  */
+        /* The key exists in the table, return -1  */
         if (htab->table[idx].hashval == hval
             && COMPARE (htab->table[idx].data, val) == 0)
             return -1;
@@ -424,6 +424,8 @@ INSERT(NAME) (NAME *htab, HASHTYPE hval, TYPE data)
     }
 
     int ret_val = insert_helper(htab, hval, data);
+    if (ret_val == -1)
+        atomic_fetch_sub_explicit(&htab->filled, 1, memory_order_relaxed);
     pthread_rwlock_unlock(&htab->resize_rwl);
     return ret_val;
 }
