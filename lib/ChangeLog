@@ -1,3 +1,9 @@
+2019-08-08  Jonathon Anderson  <jma14@rice.edu>
+
+	* dynamicsizehash_concurrent.{c,h}: New files.
+	* stdatomic.h: New file, taken from FreeBSD.
+	* Makefile.am (noinst_HEADERS): Added *.h above.
+
 2019-05-03  Rosen Penev  <rosenp@gmail.com>
 
 	* color.c (parse_opt): Cast program_invocation_short_name to char *.

@@ -1,3 +1,12 @@
+2019-08-08  Jonathon Anderson  <jma14@rice.edu>
+
+	* libdw_alloc.c (__libdw_allocate): Added thread-safe stack allocator.
+	* libdwP.h (Dwarf): Likewise.
+	* dwarf_begin_elf.c (dwarf_begin_elf): Support for above.
+	* dwarf_end.c (dwarf_end): Likewise.
+	* dwarf_abbrev_hash.{c,h}: Use the *_concurrent hash table.
+	* Makefile.am: Link -lpthread to provide rwlocks.
+
 2019-06-28  Mark Wielaard  <mark@klomp.org>
 
 	* libdw.map (ELFUTILS_0.177): New section. Add
