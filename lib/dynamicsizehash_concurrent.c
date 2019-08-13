@@ -52,123 +52,130 @@ lookup (NAME *htab, HASHTYPE hval, TYPE val __attribute__ ((unused)))
        can skip the division, which helps performance when this is common.  */
     size_t idx = 1 + (hval < htab->size ? hval : hval % htab->size);
 
-    int state = atomic_load_explicit(&htab->table[idx].state,
-                                     memory_order_acquire);
-    if (state == 0)
-        return 0;
-
-    while (state == 1)
-        state = atomic_load_explicit(&htab->table[idx].state,
-                                     memory_order_acquire);
-
+    TYPE val_ptr;
     HASHTYPE hash;
 
-    if (htab->table[idx].hashval == hval
-        && COMPARE (htab->table[idx].data, val) == 0)
-        return idx;
+    hash = atomic_load_explicit(&htab->table[idx].hashval,
+                                memory_order_acquire);
+    if (hash == hval) {
+        val_ptr = (TYPE) atomic_load_explicit(&htab->table[idx].val_ptr,
+                                              memory_order_acquire);
+        if (COMPARE(val_ptr, val) == 0)
+            return idx;
+    } else if (hash == 0) {
+        return 0;
+    }
 
     /* Second hash function as suggested in [Knuth].  */
-    hash = 1 + hval % (htab->size - 2);
+    HASHTYPE second_hash = 1 + hval % (htab->size - 2);
 
     for(;;)
     {
-        if (idx <= hash)
-            idx = htab->size + idx - hash;
+        if (idx <= second_hash)
+            idx = htab->size + idx - second_hash;
         else
-            idx -= hash;
+            idx -= second_hash;
 
-        state = atomic_load_explicit(&htab->table[idx].state,
-                                     memory_order_acquire);
-        if (state == 0)
+        hash = atomic_load_explicit(&htab->table[idx].hashval,
+                                    memory_order_acquire);
+        if (hash == hval) {
+            val_ptr = (TYPE) atomic_load_explicit(&htab->table[idx].val_ptr,
+                                                  memory_order_acquire);
+            if (COMPARE(val_ptr, val) == 0)
+                return idx;
+        } else if (hash == 0) {
             return 0;
-
-        while (state == 1)
-            state = atomic_load_explicit(&htab->table[idx].state,
-                                         memory_order_acquire);
-
-        /* If entry is found use it.  */
-        if (htab->table[idx].hashval == hval
-            && COMPARE (htab->table[idx].data, val) == 0)
-            return idx;
+        }
     }
 }
 
 static int
 insert_helper (NAME *htab, HASHTYPE hval, TYPE val)
 {
-    /* First hash function: simply take the modul but prevent zero. Small values
+    /* First hash function: simply take the modul but prevent zero.  Small values
        can skip the division, which helps performance when this is common.  */
     size_t idx = 1 + (hval < htab->size ? hval : hval % htab->size);
 
-    int state = atomic_load_explicit(&htab->table[idx].state,
-                                     memory_order_acquire);
-    if (state == 0 && atomic_compare_exchange_strong_explicit(
-                          &htab->table[idx].state, &state, 1,
-                          memory_order_acquire, memory_order_acquire))
-    {
-        htab->table[idx].hashval = hval;
-        htab->table[idx].data = val;
-        atomic_store_explicit(&htab->table[idx].state, 2, memory_order_release);
-
-        return 0;
-    }
-
-    while (state == 1)
-        state = atomic_load_explicit(&htab->table[idx].state,
-                                     memory_order_acquire);
-
+    TYPE val_ptr;
     HASHTYPE hash;
 
-    if (htab->table[idx].hashval == hval
-        && COMPARE (htab->table[idx].data, val) == 0)
-        return -1;
+    hash = atomic_load_explicit(&htab->table[idx].hashval,
+                                memory_order_acquire);
+    if (hash == hval) {
+        val_ptr = (TYPE) atomic_load_explicit(&htab->table[idx].val_ptr,
+                                              memory_order_acquire);
+        if (COMPARE(val_ptr, val) != 0)
+            return -1;
+    } else if (hash == 0) {
+        val_ptr = NULL;
+        atomic_compare_exchange_strong_explicit(&htab->table[idx].val_ptr,
+                                                (uintptr_t *) &val_ptr,
+                                                (uintptr_t) val,
+                                                memory_order_acquire,
+                                                memory_order_acquire);
+
+        if (val_ptr == NULL) {
+            atomic_store_explicit(&htab->table[idx].hashval, hval,
+                                  memory_order_release);
+            return 0;
+        } else {
+            do {
+                hash = atomic_load_explicit(&htab->table[idx].val_ptr,
+                                            memory_order_acquire);
+            } while (hash == 0);
+        }
+    }
 
     /* Second hash function as suggested in [Knuth].  */
-    hash = 1 + hval % (htab->size - 2);
+    HASHTYPE second_hash = 1 + hval % (htab->size - 2);
 
     for(;;)
     {
-        if (idx <= hash)
-            idx = htab->size + idx - hash;
+        if (idx <= second_hash)
+            idx = htab->size + idx - second_hash;
         else
-            idx -= hash;
+            idx -= second_hash;
 
-        state = atomic_load_explicit(&htab->table[idx].state,
-                                     memory_order_acquire);
-        if (state == 0 && atomic_compare_exchange_strong_explicit(
-                              &htab->table[idx].state, &state, 1,
-                              memory_order_acquire, memory_order_acquire))
-        {
-            htab->table[idx].hashval = hval;
-            htab->table[idx].data = val;
-            atomic_store_explicit(&htab->table[idx].state, 2,
-                                  memory_order_release);
+        hash = atomic_load_explicit(&htab->table[idx].hashval,
+                                    memory_order_acquire);
+        if (hash == hval) {
+            val_ptr = (TYPE) atomic_load_explicit(&htab->table[idx].val_ptr,
+                                                  memory_order_acquire);
+            if (COMPARE(val_ptr, val) != 0)
+                return -1;
+        } else if (hash == 0) {
+            val_ptr = NULL;
+            atomic_compare_exchange_strong_explicit(&htab->table[idx].val_ptr,
+                                                    (uintptr_t *) &val_ptr,
+                                                    (uintptr_t) val,
+                                                    memory_order_acquire,
+                                                    memory_order_acquire);
 
-            return 0;
+            if (val_ptr == NULL) {
+                atomic_store_explicit(&htab->table[idx].hashval, hval,
+                                      memory_order_release);
+                return 0;
+            } else {
+                do {
+                    hash = atomic_load_explicit(&htab->table[idx].val_ptr,
+                                                memory_order_acquire);
+                } while (hash == 0);
+            }
         }
-
-        while (state == 1)
-            state = atomic_load_explicit(&htab->table[idx].state,
-                                         memory_order_acquire);
-
-        /* The key exists in the table, return -1  */
-        if (htab->table[idx].hashval == hval
-            && COMPARE (htab->table[idx].data, val) == 0)
-            return -1;
     }
 }
 
-#define NO_RESIZING 0
-#define ALLOCATING_MEMORY 1
-#define MOVING_DATA 3
-#define CLEANING 2
+#define NO_RESIZING 0u
+#define ALLOCATING_MEMORY 1u
+#define MOVING_DATA 3u
+#define CLEANING 2u
 
-#define STATE_BITS 2
-#define STATE_INCREMENT (1 << STATE_BITS)
+#define STATE_BITS 2u
+#define STATE_INCREMENT (1u << STATE_BITS)
 #define STATE_MASK (STATE_INCREMENT - 1)
 #define GET_STATE(A) ((A) & STATE_MASK)
 
-#define IS_NO_RESIZE_OR_CLEANING(A) (((A) & 0x1) == 0)
+#define IS_NO_RESIZE_OR_CLEANING(A) (((A) & 0x1u) == 0)
 
 #define GET_ACTIVE_WORKERS(A) ((A) >> STATE_BITS)
 
@@ -193,8 +200,10 @@ static void resize_helper(NAME *htab, int blocking) {
         if (record_end > htab->size)
             record_end = htab->size;
 
-        while (record_it++ != record_end)
-            atomic_init(&htab->table[record_it].state, 0);
+        while (record_it++ != record_end) {
+            atomic_init(&htab->table[record_it].hashval, (uintptr_t) NULL);
+            atomic_init(&htab->table[record_it].val_ptr, (uintptr_t) NULL);
+        }
 
         num_finished_blocks++;
     }
@@ -215,12 +224,14 @@ static void resize_helper(NAME *htab, int blocking) {
             record_end = htab->old_size;
 
         while (record_it++ != record_end) {
-            if (atomic_load_explicit(&htab->old_table[record_it].state,
-                                     memory_order_relaxed) != 2)
+            TYPE val_ptr = (TYPE) atomic_load(&htab->old_table[record_it].val_ptr);
+            if (val_ptr == NULL)
                 continue;
 
-            insert_helper(htab, htab->old_table[record_it].hashval,
-                          htab->old_table[record_it].data);
+            HASHTYPE hashval = atomic_load(&htab->old_table[record_it].hashval);
+            assert(hashval);
+
+            insert_helper(htab, hashval, val_ptr);
         }
 
         num_finished_blocks++;
@@ -343,8 +354,10 @@ INIT(NAME) (NAME *htab, size_t init_size)
     if (htab->table == NULL)
         return -1;
 
-    for (size_t i = 0; i <= init_size; i++)
-        atomic_init(&htab->table[i].state, 0);
+    for (size_t i = 0; i <= init_size; i++) {
+        atomic_init(&htab->table[i].hashval, (uintptr_t) NULL);
+        atomic_init(&htab->table[i].val_ptr, (uintptr_t) NULL);
+    }
 
     return 0;
 }
@@ -356,7 +369,7 @@ int
   name##_free
 FREE(NAME) (NAME *htab)
 {
-    pthread_rwlock_destroy (&htab->resize_rwl);
+    pthread_rwlock_destroy(&htab->resize_rwl);
     free (htab->table);
     return 0;
 }
@@ -454,7 +467,7 @@ FIND(NAME) (NAME *htab, HASHTYPE hval, TYPE val)
     }
 
     /* get a copy before unlocking the lock */
-    TYPE ret_val = htab->table[idx].data;
+    TYPE ret_val = (TYPE) atomic_load(&htab->table[idx].val_ptr);
 
     pthread_rwlock_unlock(&htab->resize_rwl);
     return ret_val;
